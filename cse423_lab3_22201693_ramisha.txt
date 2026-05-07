@@ -1,0 +1,643 @@
+#cse423_lab3_22201693_ramisha_sec24
+
+#task1
+
+from OpenGL.GL import *
+from OpenGL.GLUT import *
+from OpenGL.GLU import *
+import random
+import math
+
+# Game State Variable
+hrithikk = [0, -400, 0]  # Player position [x, y, z]
+hritzz = 0  # Gun rotation angle
+hrikk = []  # List of bullets 
+hrinn = []  # List of enemies 
+hrithh = 5  # Player life remaining
+hrikik = 0  # Game score
+hritiz = 0  # Bullets missed count
+hritt = False  # Cheat mode (auto-fire and rotate)
+hrriii = False  # Cheat vision (camera follows gun in first person)
+
+#Camera Variables 
+camera_pos = [0, 500, 500]  # Camera position [x, y, z]
+camera_angle = 0  # Camera rotation angle around the grid
+camera_height = 500  # Camera height
+first_person = False  # Camera mode toggle
+
+#Game Constant
+GRID_LENGTH = 600
+fovY = 120
+PLAYER_SPEED = 10
+BULLET_SPEED = 15
+ENEMY_SPEED = 3
+NUM_ENEMIES = 5
+game_over = False
+cheat_rotation_speed = 5
+
+# Animation counters
+enemy_scale_counter = 0
+cheat_auto_fire_counter = 0
+
+
+def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
+    """Draw text at screen coordinates"""
+    glColor3f(1, 1, 1)
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, 1000, 0, 800)
+    
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+    
+    glRasterPos2f(x, y)
+    for ch in text:
+        glutBitmapCharacter(font, ord(ch))
+    
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+
+def draw_grid():
+    """Draw the checkered grid floor"""
+    glBegin(GL_QUADS)
+    
+    # Create checkered pattern
+    tile_size = GRID_LENGTH / 10
+    for i in range(-10, 10):
+        for j in range(-10, 10):
+            if (i + j) % 2 == 0:
+                glColor3f(1, 1, 1)
+            else:
+                glColor3f(0.7, 0.5, 0.95)
+            
+            x1 = i * tile_size
+            y1 = j * tile_size
+            x2 = x1 + tile_size
+            y2 = y1 + tile_size
+            
+            glVertex3f(x1, y1, 0)
+            glVertex3f(x2, y1, 0)
+            glVertex3f(x2, y2, 0)
+            glVertex3f(x1, y2, 0)
+    
+    glEnd()
+
+
+def draw_boundaries():
+    """Draw the four vertical boundary walls"""
+    wall_height = 100
+    
+    # Front wall (blue)
+    glColor3f(0, 0, 1)
+    glBegin(GL_QUADS)
+    glVertex3f(-GRID_LENGTH, -GRID_LENGTH, 0)
+    glVertex3f(GRID_LENGTH, -GRID_LENGTH, 0)
+    glVertex3f(GRID_LENGTH, -GRID_LENGTH, wall_height)
+    glVertex3f(-GRID_LENGTH, -GRID_LENGTH, wall_height)
+    glEnd()
+    
+    # Right wall (green)
+    glColor3f(0, 1, 0)
+    glBegin(GL_QUADS)
+    glVertex3f(GRID_LENGTH, -GRID_LENGTH, 0)
+    glVertex3f(GRID_LENGTH, GRID_LENGTH, 0)
+    glVertex3f(GRID_LENGTH, GRID_LENGTH, wall_height)
+    glVertex3f(GRID_LENGTH, -GRID_LENGTH, wall_height)
+    glEnd()
+    
+    # Back wall (cyan)
+    glColor3f(0, 1, 1)
+    glBegin(GL_QUADS)
+    glVertex3f(GRID_LENGTH, GRID_LENGTH, 0)
+    glVertex3f(-GRID_LENGTH, GRID_LENGTH, 0)
+    glVertex3f(-GRID_LENGTH, GRID_LENGTH, wall_height)
+    glVertex3f(GRID_LENGTH, GRID_LENGTH, wall_height)
+    glEnd()
+    
+    # Left wall (yellow)
+    glColor3f(1, 1, 0)
+    glBegin(GL_QUADS)
+    glVertex3f(-GRID_LENGTH, GRID_LENGTH, 0)
+    glVertex3f(-GRID_LENGTH, -GRID_LENGTH, 0)
+    glVertex3f(-GRID_LENGTH, -GRID_LENGTH, wall_height)
+    glVertex3f(-GRID_LENGTH, GRID_LENGTH, wall_height)
+    glEnd()
+
+
+def draw_player():
+    """Draw the player with gun"""
+    global game_over
+    
+    px, py, pz = hrithikk
+    
+    glPushMatrix()
+    glTranslatef(px, py, pz)
+    glRotatef(hritzz, 0, 0, 1)
+    
+    if game_over:
+        # Player lying down
+        glRotatef(90, 0, 1, 0)
+        glRotatef(90, 1, 0, 0)
+    
+    # Body (gray cuboid)
+    glColor3f(0.5, 0.5, 0.5)
+    glPushMatrix()
+    glScalef(1, 1, 2)
+    glutSolidCube(30)
+    glPopMatrix()
+    
+    # Head (sphere)
+    glColor3f(0.9, 0.7, 0.6)
+    glPushMatrix()
+    glTranslatef(0, 0, 40)
+    glutSolidSphere(15, 10, 10)
+    glPopMatrix()
+    
+    # Arms (cylinders)
+    if not game_over:
+        # Left arm
+        glColor3f(0.9, 0.7, 0.6)
+        glPushMatrix()
+        glTranslatef(-20, 0, 10)
+        glRotatef(90, 0, 1, 0)
+        gluCylinder(gluNewQuadric(), 5, 5, 30, 10, 10)
+        glPopMatrix()
+        
+        # Right arm
+        glPushMatrix()
+        glTranslatef(20, 0, 10)
+        glRotatef(90, 0, 1, 0)
+        gluCylinder(gluNewQuadric(), 5, 5, 30, 10, 10)
+        glPopMatrix()
+    
+    # Legs (blue cylinders)
+    glColor3f(0, 0, 1)
+    # Left leg
+    glPushMatrix()
+    glTranslatef(-10, 0, -15)
+    glRotatef(90, 1, 0, 0)
+    gluCylinder(gluNewQuadric(), 5, 5, 30, 10, 10)
+    glPopMatrix()
+    
+    # Right leg
+    glPushMatrix()
+    glTranslatef(10, 0, -15)
+    glRotatef(90, 1, 0, 0)
+    gluCylinder(gluNewQuadric(), 5, 5, 30, 10, 10)
+    glPopMatrix()
+    
+    # Gun (dark gray cylinder pointing forward)
+    if not game_over:
+        glColor3f(0.2, 0.2, 0.2)
+        glPushMatrix()
+        glTranslatef(0, 20, 20)
+        glRotatef(90, 1, 0, 0)
+        gluCylinder(gluNewQuadric(), 5, 5, 60, 10, 10)
+        glPopMatrix()
+    
+    glPopMatrix()
+
+
+def draw_bullet(bx, by, bz):
+    """Draw a single bullet as a small cube"""
+    glPushMatrix()
+    glTranslatef(bx, by, bz)
+    glColor3f(1, 1, 0)
+    glutSolidCube(8)
+    glPopMatrix()
+
+
+def draw_enemy(ex, ey, ez, scale):
+    """Draw an enemy as two stacked spheres"""
+    glPushMatrix()
+    glTranslatef(ex, ey, ez)
+    
+    # Bottom sphere (red)
+    glColor3f(1, 0, 0)
+    glPushMatrix()
+    glScalef(scale, scale, scale)
+    glutSolidSphere(20, 10, 10)
+    glPopMatrix()
+    
+    # Top sphere (dark red)
+    glColor3f(0.7, 0, 0)
+    glPushMatrix()
+    glTranslatef(0, 0, 30 * scale)
+    glScalef(scale, scale, scale)
+    glutSolidSphere(15, 10, 10)
+    glPopMatrix()
+    
+    glPopMatrix()
+
+
+def initialize_enemies():
+    """Initialize enemy positions"""
+    global hrinn
+    hrinn = []
+    for _ in range(NUM_ENEMIES):
+        spawn_enemy()
+
+
+def spawn_enemy():
+    """Spawn a new enemy at a random position"""
+    global hrinn
+    
+    # Random position on the grid
+    ex = random.uniform(-GRID_LENGTH + 100, GRID_LENGTH - 100)
+    ey = random.uniform(-GRID_LENGTH + 100, GRID_LENGTH - 100)
+    
+    # Ensure enemy doesn't spawn too close to player
+    px, py, _ = hrithikk
+    while math.sqrt((ex - px)**2 + (ey - py)**2) < 200:
+        ex = random.uniform(-GRID_LENGTH + 100, GRID_LENGTH - 100)
+        ey = random.uniform(-GRID_LENGTH + 100, GRID_LENGTH - 100)
+    
+    ez = 0
+    hrinn.append([ex, ey, ez, px, py, 1.0])
+
+
+def fire_bullet():
+    """Fire a bullet from the player's gun"""
+    global hrikk
+    
+    if game_over:
+        return
+    
+    px, py, pz = hrithikk
+    
+    # Calculate bullet starting position (in front of gun)
+    angle_rad = math.radians(hritzz)
+    bx = px + 60 * math.cos(angle_rad)
+    by = py + 60 * math.sin(angle_rad)
+    bz = 20
+    
+    hrikk.append([bx, by, bz, hritzz])
+
+
+def update_bullets():
+    """Update bullet positions and check for collisions"""
+    global hrikk, hrinn, hrikik, hritiz
+    
+    bullets_to_remove = []
+    
+    for i, bullet in enumerate(hrikk):
+        bx, by, bz, angle = bullet
+        
+        # Move bullet forward
+        angle_rad = math.radians(angle)
+        bx += BULLET_SPEED * math.cos(angle_rad)
+        by += BULLET_SPEED * math.sin(angle_rad)
+        
+        # Check if bullet is out of bounds
+        if abs(bx) > GRID_LENGTH or abs(by) > GRID_LENGTH:
+            bullets_to_remove.append(i)
+            hritiz += 1  # Increment missed bullets
+            continue
+        
+        # Check collision with enemies
+        hit = False
+        for j, enemy in enumerate(hrinn):
+            ex, ey, ez, _, _, _ = enemy
+            distance = math.sqrt((bx - ex)**2 + (by - ey)**2 + (bz - ez)**2)
+            
+            if distance < 30:  # Hit detection radius
+                hit = True
+                bullets_to_remove.append(i)
+                hrikik += 1  # Increment score
+                # Respawn enemy
+                hrinn.pop(j)
+                spawn_enemy()
+                break
+        
+        if not hit:
+            hrikk[i] = [bx, by, bz, angle]
+    
+    # Remove bullets that hit or went out of bounds
+    for i in sorted(bullets_to_remove, reverse=True):
+        if i < len(hrikk):
+            hrikk.pop(i)
+
+
+def update_enemies():
+    """Update enemy positions to follow player"""
+    global hrinn, hrithh, game_over
+    
+    if game_over:
+        return
+    
+    px, py, _ = hrithikk
+    
+    for i, enemy in enumerate(hrinn):
+        ex, ey, ez, tx, ty, scale = enemy
+        
+        # Update target to current player position
+        tx, ty = px, py
+        
+        # Move towards player
+        dx = tx - ex
+        dy = ty - ey
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        if distance > 20:
+            ex += (dx / distance) * ENEMY_SPEED
+            ey += (dy / distance) * ENEMY_SPEED
+        
+        # Check collision with player
+        player_distance = math.sqrt((ex - px)**2 + (ey - py)**2)
+        if player_distance < 40:
+            hrithh -= 1
+            # Respawn enemy after collision
+            hrinn.pop(i)
+            spawn_enemy()
+            
+            if hrithh <= 0:
+                game_over = True
+            return
+        
+        hrinn[i] = [ex, ey, ez, tx, ty, scale]
+
+
+def update_enemy_animation():
+    """Update enemy scale for pulsing animation"""
+    global enemy_scale_counter, hrinn
+    
+    enemy_scale_counter += 1
+    scale = 1.0 + 0.2 * math.sin(enemy_scale_counter * 0.1)
+    
+    for i in range(len(hrinn)):
+        hrinn[i][5] = scale
+
+
+def check_game_over():
+    """Check if game over conditions are met"""
+    global game_over
+    
+    if hrithh <= 0 or hritiz >= 10:
+        game_over = True
+
+
+def reset_game():
+    """Reset the game state"""
+    global hrithikk, hritzz, hrikk, hrinn, hrithh, hrikik, hritiz, hritt, hrriii, game_over
+    
+    hrithikk = [0, -400, 0]
+    hritzz = 0
+    hrikk = []
+    hrithh = 5
+    hrikik = 0
+    hritiz = 0
+    hritt = False
+    hrriii = False
+    game_over = False
+    
+    initialize_enemies()
+
+
+def check_enemy_in_line_of_sight():
+    """Check if any enemy is in the gun's line of sight"""
+    px, py, _ = hrithikk
+    angle_rad = math.radians(hritzz)
+    gun_dx = math.cos(angle_rad)
+    gun_dy = math.sin(angle_rad)
+    
+    for enemy in hrinn:
+        ex, ey, _, _, _, _ = enemy
+        
+        # Vector from player to enemy
+        to_enemy_x = ex - px
+        to_enemy_y = ey - py
+        distance = math.sqrt(to_enemy_x**2 + to_enemy_y**2)
+        
+        if distance < 10:
+            continue
+        
+        # Normalize
+        to_enemy_x /= distance
+        to_enemy_y /= distance
+        
+        # Check if enemy is in front and aligned with gun direction
+        dot_product = gun_dx * to_enemy_x + gun_dy * to_enemy_y
+        
+        if dot_product > 0.95:  # Very narrow cone
+            return True
+    
+    return False
+
+
+def setupCamera():
+    """Configure camera projection and view"""
+    global camera_pos, first_person, hrriii, hritt
+    
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(fovY, 1.25, 0.1, 1500)
+    glMatrixMode(GL_MODELVIEW)
+    glLoadIdentity()
+    
+    if first_person:
+        # First person view - camera follows player
+        px, py, pz = hrithikk
+        angle_rad = math.radians(hritzz)
+        
+        # Camera position slightly behind and above player
+        cam_x = px - 50 * math.cos(angle_rad)
+        cam_y = py - 50 * math.sin(angle_rad)
+        cam_z = 50
+        
+        # Look direction
+        look_x = px + 100 * math.cos(angle_rad)
+        look_y = py + 100 * math.sin(angle_rad)
+        look_z = 20
+        
+        gluLookAt(cam_x, cam_y, cam_z,
+                  look_x, look_y, look_z,
+                  0, 0, 1)
+    else:
+        # Third person view - rotating camera
+        radius = 700
+        angle_rad = math.radians(camera_angle)
+        
+        cam_x = radius * math.cos(angle_rad)
+        cam_y = radius * math.sin(angle_rad)
+        cam_z = camera_height
+        
+        gluLookAt(cam_x, cam_y, cam_z,
+                  0, 0, 0,
+                  0, 0, 1)
+
+
+def keyboardListener(key, x, y):
+    """Handle keyboard input"""
+    global hrithikk, hritzz, hritt, hrriii, game_over
+    
+    if key == b'w' and not game_over:
+        # Move forward
+        px, py, pz = hrithikk
+        angle_rad = math.radians(hritzz)
+        px += PLAYER_SPEED * math.cos(angle_rad)
+        py += PLAYER_SPEED * math.sin(angle_rad)
+        
+        # Keep within bounds
+        px = max(-GRID_LENGTH + 50, min(GRID_LENGTH - 50, px))
+        py = max(-GRID_LENGTH + 50, min(GRID_LENGTH - 50, py))
+        
+        hrithikk = [px, py, pz]
+    
+    elif key == b's' and not game_over:
+        # Move backward
+        px, py, pz = hrithikk
+        angle_rad = math.radians(hritzz)
+        px -= PLAYER_SPEED * math.cos(angle_rad)
+        py -= PLAYER_SPEED * math.sin(angle_rad)
+        
+        px = max(-GRID_LENGTH + 50, min(GRID_LENGTH - 50, px))
+        py = max(-GRID_LENGTH + 50, min(GRID_LENGTH - 50, py))
+        
+        hrithikk = [px, py, pz]
+    
+    elif key == b'a' and not game_over and not hritt:
+        # Rotate left
+        hritzz += 5
+    
+    elif key == b'd' and not game_over and not hritt:
+        # Rotate right
+        hritzz -= 5
+    
+    elif key == b'c' and not game_over:
+        # Toggle cheat mode
+        hritt = not hritt
+    
+    elif key == b'v' and not game_over and hritt:
+        # Toggle cheat vision (only works in cheat mode)
+        hrriii = not hrriii
+        if hrriii:
+            # Switch to first person when cheat vision is on
+            globals()['first_person'] = True
+    
+    elif key == b'r' and game_over:
+        # Reset game
+        reset_game()
+    
+    glutPostRedisplay()
+
+
+def specialKeyListener(key, x, y):
+    """Handle special keys (arrow keys)"""
+    global camera_angle, camera_height, first_person
+    
+    if key == GLUT_KEY_UP:
+        camera_height += 20
+    elif key == GLUT_KEY_DOWN:
+        camera_height -= 20
+    elif key == GLUT_KEY_LEFT:
+        camera_angle += 5
+    elif key == GLUT_KEY_RIGHT:
+        camera_angle -= 5
+    
+    glutPostRedisplay()
+
+
+def mouseListener(button, state, x, y):
+    """Handle mouse input"""
+    global first_person
+    
+    if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN and not game_over:
+        fire_bullet()
+    
+    elif button == GLUT_RIGHT_BUTTON and state == GLUT_DOWN:
+        first_person = not first_person
+    
+    glutPostRedisplay()
+
+
+def idle():
+    """Idle function for continuous updates"""
+    global cheat_auto_fire_counter, hritzz, hritt, hrriii
+    
+    if not game_over:
+        update_bullets()
+        update_enemies()
+        update_enemy_animation()
+        check_game_over()
+        
+        # Cheat mode: auto-rotate and auto-fire
+        if hritt:
+            hritzz += cheat_rotation_speed
+            
+            cheat_auto_fire_counter += 1
+            if cheat_auto_fire_counter > 10:  # Fire every 10 frames
+                if check_enemy_in_line_of_sight():
+                    fire_bullet()
+                cheat_auto_fire_counter = 0
+    
+    glutPostRedisplay()
+
+
+def showScreen():
+    """Main display function"""
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    glLoadIdentity()
+    glViewport(0, 0, 1000, 800)
+    
+    glEnable(GL_DEPTH_TEST)
+    
+    setupCamera()
+    
+    # Draw scene
+    draw_grid()
+    draw_boundaries()
+    draw_player()
+    
+    # Draw all bullets
+    for bullet in hrikk:
+        bx, by, bz, _ = bullet
+        draw_bullet(bx, by, bz)
+    
+    # Draw all enemies
+    for enemy in hrinn:
+        ex, ey, ez, _, _, scale = enemy
+        draw_enemy(ex, ey, ez, scale)
+    
+    # Draw UI text
+    draw_text(10, 770, f"Player Life Remaining: {hrithh}")
+    draw_text(10, 740, f"Game Score: {hrikik}")
+    draw_text(10, 710, f"Player Bullet Missed: {hritiz}")
+    
+    if hritt:
+        draw_text(10, 680, "CHEAT MODE: ON")
+    
+    if game_over:
+        draw_text(300, 400, "GAME OVER! Press R to Restart")
+    
+    glutSwapBuffers()
+
+
+def main():
+    """Main entry point"""
+    glutInit()
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
+    glutInitWindowSize(1000, 800)
+    glutInitWindowPosition(0, 0)
+    wind = glutCreateWindow(b"Bullet Frenzy - 3D Game")
+    
+    glClearColor(0, 0, 0, 1)
+    
+    # Initialize game
+    initialize_enemies()
+    
+    glutDisplayFunc(showScreen)
+    glutKeyboardFunc(keyboardListener)
+    glutSpecialFunc(specialKeyListener)
+    glutMouseFunc(mouseListener)
+    glutIdleFunc(idle)
+    
+    glutMainLoop()
+
+
+if __name__ == "__main__":
+    main()
