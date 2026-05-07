@@ -1,0 +1,396 @@
+
+
+
+from OpenGL.GL import *
+from OpenGL.GLUT import *
+from OpenGL.GLU import *
+import random
+import time
+
+
+WINDOW_WIDTH, WINDOW_HEIGHT = 500, 600
+hrithikk = 250  # Catcher x position
+hritzz = 50     # Catcher y position
+hrikk = 0       # Diamond x position
+hrinn = 550     # Diamond y position
+hrithh = 0      # Score
+hrikik = 2      # Diamond fall speed
+hritiz = False  # Game over state
+hritt = False   # Paused state
+hrriii = False  # Cheat mode
+diamond_color = [1.0, 1.0, 0.0]  # Current diamond color
+last_time = time.time()
+catcher_speed = 5
+auto_move_speed = 3
+
+
+def find_zone(dx, dy):
+    """Determine which zone a line belongs to based on dx and dy"""
+    if abs(dx) >= abs(dy):
+        if dx > 0 and dy >= 0:
+            return 0
+        elif dx > 0 and dy < 0:
+            return 7
+        elif dx < 0 and dy >= 0:
+            return 3
+        else:
+            return 4
+    else:
+        if dx >= 0 and dy > 0:
+            return 1
+        elif dx < 0 and dy > 0:
+            return 2
+        elif dx < 0 and dy < 0:
+            return 5
+        else:
+            return 6
+
+
+def convert_to_zone0(x, y, zone):
+    """Convert coordinates from any zone to Zone 0"""
+    if zone == 0:
+        return x, y
+    elif zone == 1:
+        return y, x
+    elif zone == 2:
+        return y, -x
+    elif zone == 3:
+        return -x, y
+    elif zone == 4:
+        return -x, -y
+    elif zone == 5:
+        return -y, -x
+    elif zone == 6:
+        return -y, x
+    elif zone == 7:
+        return x, -y
+
+
+def convert_from_zone0(x, y, zone):
+    """Convert coordinates from Zone 0 back to original zone"""
+    if zone == 0:
+        return x, y
+    elif zone == 1:
+        return y, x
+    elif zone == 2:
+        return -y, x
+    elif zone == 3:
+        return -x, y
+    elif zone == 4:
+        return -x, -y
+    elif zone == 5:
+        return -y, -x
+    elif zone == 6:
+        return y, -x
+    elif zone == 7:
+        return x, -y
+
+
+def draw_point(x, y):
+    """Draw a single point at (x, y)"""
+    glVertex2f(x, y)
+
+
+def midpoint_line(x1, y1, x2, y2):
+    """Midpoint Line Drawing Algorithm for all 8 zones"""
+    dx = x2 - x1
+    dy = y2 - y1
+    
+    zone = find_zone(dx, dy)
+    
+    # Convert to Zone 0
+    x1_z0, y1_z0 = convert_to_zone0(x1, y1, zone)
+    x2_z0, y2_z0 = convert_to_zone0(x2, y2, zone)
+    
+    dx = x2_z0 - x1_z0
+    dy = y2_z0 - y1_z0
+    
+    d = 2 * dy - dx
+    incE = 2 * dy
+    incNE = 2 * (dy - dx)
+    
+    y = y1_z0
+    
+    for x in range(int(x1_z0), int(x2_z0) + 1):
+        # Convert back to original zone
+        orig_x, orig_y = convert_from_zone0(x, y, zone)
+        draw_point(orig_x, orig_y)
+        
+        if d > 0:
+            d += incNE
+            y += 1
+        else:
+            d += incE
+
+
+#Drawing Functions 
+def draw_diamond(x, y, size, color):
+    """Draw a diamond using 4 midpoint lines"""
+    glColor3f(color[0], color[1], color[2])
+    glBegin(GL_POINTS)
+    midpoint_line(x, y + size, x + size, y)      # Top-right
+    midpoint_line(x + size, y, x, y - size)      # Bottom-right
+    midpoint_line(x, y - size, x - size, y)      # Bottom-left
+    midpoint_line(x - size, y, x, y + size)      # Top-left
+    glEnd()
+
+
+def draw_catcher(x, y, width, color):
+    """Draw the catcher using 4 midpoint lines"""
+    glColor3f(color[0], color[1], color[2])
+    glBegin(GL_POINTS)
+    # Bottom trapezoid shape
+    half_w = width // 2
+    top_w = width // 3
+    height = 15
+    
+    midpoint_line(x - half_w, y, x + half_w, y)          # Bottom line
+    midpoint_line(x - half_w, y, x - top_w, y + height)  # Left slant
+    midpoint_line(x + half_w, y, x + top_w, y + height)  # Right slant
+    midpoint_line(x - top_w, y + height, x + top_w, y + height)  # Top line
+    glEnd()
+
+
+def draw_button_left_arrow(x, y, size):
+    """Draw left arrow for restart button"""
+    glColor3f(0.0, 0.8, 0.8)  # Bright teal
+    glBegin(GL_POINTS)
+    midpoint_line(x + size, y + size, x, y)
+    midpoint_line(x, y, x + size, y - size)
+    glEnd()
+
+
+def draw_button_play(x, y, size):
+    """Draw play icon (triangle)"""
+    glColor3f(1.0, 0.75, 0.0)  # Amber
+    glBegin(GL_POINTS)
+    midpoint_line(x - size//2, y + size, x + size//2, y)
+    midpoint_line(x + size//2, y, x - size//2, y - size)
+    midpoint_line(x - size//2, y - size, x - size//2, y + size)
+    glEnd()
+
+
+def draw_button_pause(x, y, size):
+    """Draw pause icon (two parallel lines)"""
+    glColor3f(1.0, 0.75, 0.0)  # Amber
+    glBegin(GL_POINTS)
+    midpoint_line(x - size//3, y - size, x - size//3, y + size)
+    midpoint_line(x + size//3, y - size, x + size//3, y + size)
+    glEnd()
+
+
+def draw_button_cross(x, y, size):
+    """Draw cross (X) for exit button"""
+    glColor3f(1.0, 0.0, 0.0)  # Red
+    glBegin(GL_POINTS)
+    midpoint_line(x - size, y - size, x + size, y + size)
+    midpoint_line(x - size, y + size, x + size, y - size)
+    glEnd()
+
+
+def draw_buttons():
+    """Draw all three control buttons"""
+    draw_button_left_arrow(50, 570, 15)
+    if hritt:
+        draw_button_play(250, 570, 15)
+    else:
+        draw_button_pause(250, 570, 15)
+    draw_button_cross(450, 570, 15)
+
+
+#Collision Detection 
+def check_collision():
+    """AABB collision detection between diamond and catcher"""
+    global hrithh, hrikk, hrinn, diamond_color
+    
+    # Diamond bounding box (size 15)
+    d_left = hrikk - 15
+    d_right = hrikk + 15
+    d_top = hrinn + 15
+    d_bottom = hrinn - 15
+    
+    # Catcher bounding box
+    c_width = 80
+    c_left = hrithikk - c_width // 2
+    c_right = hrithikk + c_width // 2
+    c_top = hritzz + 15
+    c_bottom = hritzz
+    
+    # AABB collision check
+    if (d_left < c_right and d_right > c_left and
+        d_top > c_bottom and d_bottom < c_top):
+        hrithh += 1
+        print(f"Score: {hrithh}")
+        reset_diamond()
+        return True
+    return False
+
+
+def reset_diamond():
+    """Reset diamond to random position at top"""
+    global hrikk, hrinn, diamond_color, hrikik
+    hrikk = random.randint(50, 450)
+    hrinn = 550
+    diamond_color = [random.uniform(0.5, 1.0), 
+                     random.uniform(0.5, 1.0), 
+                     random.uniform(0.5, 1.0)]
+    # Gradually increase speed
+    hrikik = 2 + (hrithh * 0.2)
+
+
+# Game Logic 
+def update_game(delta_time):
+    """Update game state based on delta time"""
+    global hrinn, hritiz, hrithikk, hrikk
+    
+    if hritiz or hritt:
+        return
+    
+    # Update diamond position
+    hrinn -= hrikik * delta_time * 60
+    
+    # Check collision
+    check_collision()
+    
+    # Check if diamond missed
+    if hrinn < 30:
+        game_over()
+    
+    # Cheat mode: move catcher towards diamond
+    if hrriii:
+        if hrithikk < hrikk - 5:
+            hrithikk += auto_move_speed
+        elif hrithikk > hrikk + 5:
+            hrithikk -= auto_move_speed
+
+
+def game_over():
+    """Handle game over state"""
+    global hritiz
+    hritiz = True
+    print(f"Game Over! Final Score: {hrithh}")
+
+
+def restart_game():
+    """Restart the game"""
+    global hrithikk, hritzz, hrikk, hrinn, hrithh, hrikik, hritiz, hritt, diamond_color
+    hrithikk = 250
+    hritzz = 50
+    hrithh = 0
+    hrikik = 2
+    hritiz = False
+    hritt = False
+    reset_diamond()
+    print("Starting Over")
+
+
+#OpenGL Display Function
+def display():
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    glLoadIdentity()
+    
+    # Draw buttons
+    draw_buttons()
+    
+    # Draw diamond (if not game over)
+    if not hritiz:
+        draw_diamond(int(hrikk), int(hrinn), 15, diamond_color)
+    
+    # Draw catcher
+    catcher_color = [1.0, 0.0, 0.0] if hritiz else [1.0, 1.0, 1.0]
+    draw_catcher(int(hrithikk), hritzz, 80, catcher_color)
+    
+    glutSwapBuffers()
+
+
+#Input Handlers
+def keyboard(key, x, y):
+    """Handle keyboard input"""
+    global hritt, hrriii
+    
+    if key == b'c' or key == b'C':
+        hrriii = not hrriii
+        print(f"Cheat Mode: {'ON' if hrriii else 'OFF'}")
+
+
+def special_input(key, x, y):
+    """Handle special key input (arrow keys)"""
+    global hrithikk
+    
+    if hritiz or hritt:
+        return
+    
+    if key == GLUT_KEY_LEFT:
+        hrithikk = max(40, hrithikk - catcher_speed)
+    elif key == GLUT_KEY_RIGHT:
+        hrithikk = min(460, hrithikk + catcher_speed)
+
+
+def mouse(button, state, x, y):
+    """Handle mouse clicks for buttons"""
+    global hritt
+    
+    if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
+        # Convert screen coordinates
+        mx = x
+        my = WINDOW_HEIGHT - y
+        
+        # Check restart button (left)
+        if 35 <= mx <= 65 and 555 <= my <= 585:
+            restart_game()
+        
+        # Check play/pause button (middle)
+        elif 235 <= mx <= 265 and 555 <= my <= 585:
+            if not hritiz:
+                hritt = not hritt
+        
+        # Check exit button (right)
+        elif 435 <= mx <= 465 and 555 <= my <= 585:
+            print(f"Goodbye! Final Score: {hrithh}")
+            glutLeaveMainLoop()
+
+
+def idle():
+    """Update game on idle"""
+    global last_time
+    
+    current_time = time.time()
+    delta_time = current_time - last_time
+    last_time = current_time
+    
+    update_game(delta_time)
+    glutPostRedisplay()
+
+
+#Setup and Main
+def setup_projection():
+    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    glOrtho(0.0, WINDOW_WIDTH, 0.0, WINDOW_HEIGHT, 0.0, 1.0)
+    glMatrixMode(GL_MODELVIEW)
+
+
+def main():
+    glutInit()
+    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE)
+    glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    glutInitWindowPosition(100, 100)
+    glutCreateWindow(b"Catch the Diamonds!")
+    
+    setup_projection()
+    glClearColor(0.0, 0.0, 0.0, 1.0)
+    
+    glutDisplayFunc(display)
+    glutIdleFunc(idle)
+    glutKeyboardFunc(keyboard)
+    glutSpecialFunc(special_input)
+    glutMouseFunc(mouse)
+    
+    reset_diamond()
+    
+    glutMainLoop()
+
+
+if __name__ == "__main__":
+    main()
